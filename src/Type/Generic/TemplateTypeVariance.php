@@ -85,11 +85,15 @@ class TemplateTypeVariance
 
 		if ($this->covariant()) {
 			if ($other->contravariant()) {
-				return self::createCovariant();
+				return self::createContravariant();
 			}
 			if ($other->covariant()) {
 				return self::createCovariant();
 			}
+			return self::createInvariant();
+		}
+
+		if ($this->invariant()) {
 			return self::createInvariant();
 		}
 

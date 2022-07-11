@@ -21,33 +21,37 @@ class MissingReadOnlyByPhpDocPropertyAssignRuleTest extends RuleTestCase
 			new ConstructorsHelper([
 				'MissingReadOnlyPropertyAssignPhpDoc\\TestCase::setUp',
 			]),
-			new DirectReadWritePropertiesExtensionProvider([
-				new class() implements ReadWritePropertiesExtension {
-
-					public function isAlwaysRead(PropertyReflection $property, string $propertyName): bool
-					{
-						return $this->isEntityId($property, $propertyName);
-					}
-
-					public function isAlwaysWritten(PropertyReflection $property, string $propertyName): bool
-					{
-						return $this->isEntityId($property, $propertyName);
-					}
-
-					public function isInitialized(PropertyReflection $property, string $propertyName): bool
-					{
-						return $this->isEntityId($property, $propertyName);
-					}
-
-					private function isEntityId(PropertyReflection $property, string $propertyName): bool
-					{
-						return $property->getDeclaringClass()->getName() === 'MissingReadOnlyPropertyAssignPhpDoc\\Entity'
-							&& in_array($propertyName, ['id'], true);
-					}
-
-				},
-			]),
 		);
+	}
+
+	protected function getReadWritePropertiesExtensions(): array
+	{
+		return [
+			new class() implements ReadWritePropertiesExtension {
+
+				public function isAlwaysRead(PropertyReflection $property, string $propertyName): bool
+				{
+					return $this->isEntityId($property, $propertyName);
+				}
+
+				public function isAlwaysWritten(PropertyReflection $property, string $propertyName): bool
+				{
+					return $this->isEntityId($property, $propertyName);
+				}
+
+				public function isInitialized(PropertyReflection $property, string $propertyName): bool
+				{
+					return $this->isEntityId($property, $propertyName);
+				}
+
+				private function isEntityId(PropertyReflection $property, string $propertyName): bool
+				{
+					return $property->getDeclaringClass()->getName() === 'MissingReadOnlyPropertyAssignPhpDoc\\Entity'
+						&& in_array($propertyName, ['id'], true);
+				}
+
+			},
+		];
 	}
 
 	public function testRule(): void
@@ -116,6 +120,22 @@ class MissingReadOnlyByPhpDocPropertyAssignRuleTest extends RuleTestCase
 			[
 				'@readonly property MissingReadOnlyPropertyAssignPhpDoc\FooTraitClass::$doubleAssigned is already assigned.',
 				192,
+			],
+			[
+				'Class MissingReadOnlyPropertyAssignPhpDoc\A has an uninitialized @readonly property $a. Assign it in the constructor.',
+				233,
+			],
+			[
+				'Class MissingReadOnlyPropertyAssignPhpDoc\B has an uninitialized @readonly property $b. Assign it in the constructor.',
+				240,
+			],
+			[
+				'Access to an uninitialized @readonly property MissingReadOnlyPropertyAssignPhpDoc\B::$b.',
+				244,
+			],
+			[
+				'@readonly property MissingReadOnlyPropertyAssignPhpDoc\C::$c is already assigned.',
+				257,
 			],
 		]);
 	}

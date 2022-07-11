@@ -1,0 +1,13 @@
+{
+	"require": {
+		"php": "^8.1"
+	},
+	"require-dev": {
+		"apigen/apigen": "dev-master#31d3291d929232cbf6fed3bb4475b7b337687ffd"
+	},
+	"autoload": {
+		"psr-4": {
+			"PHPStan\\ApiGen\\": "src"
+		}
+	}
+}

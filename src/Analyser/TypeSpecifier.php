@@ -249,7 +249,8 @@ class TypeSpecifier
 				}
 
 				if (
-					$exprNode instanceof FuncCall
+					$context->truthy()
+					&& $exprNode instanceof FuncCall
 					&& $exprNode->name instanceof Name
 					&& in_array(strtolower($exprNode->name->toString()), ['substr', 'strstr', 'stristr', 'strchr', 'strrchr', 'strtolower', 'strtoupper', 'mb_strtolower', 'mb_strtoupper', 'ucfirst', 'lcfirst', 'ucwords'], true)
 					&& isset($exprNode->getArgs()[0])
@@ -303,7 +304,10 @@ class TypeSpecifier
 			$types = null;
 			$exprLeftType = $scope->getType($expr->left);
 			$exprRightType = $scope->getType($expr->right);
-			if ($exprLeftType instanceof ConstantType || $exprLeftType instanceof EnumCaseObjectType) {
+			if (
+				($exprLeftType instanceof ConstantType && !$exprRightType->equals($exprLeftType) && $exprRightType->isSuperTypeOf($exprLeftType)->yes())
+				|| $exprLeftType instanceof EnumCaseObjectType
+			) {
 				$types = $this->create(
 					$expr->right,
 					$exprLeftType,
@@ -313,7 +317,10 @@ class TypeSpecifier
 					$rootExpr,
 				);
 			}
-			if ($exprRightType instanceof ConstantType || $exprRightType instanceof EnumCaseObjectType) {
+			if (
+				($exprRightType instanceof ConstantType && !$exprLeftType->equals($exprRightType) && $exprLeftType->isSuperTypeOf($exprRightType)->yes())
+				|| $exprRightType instanceof EnumCaseObjectType
+			) {
 				$leftType = $this->create(
 					$expr->left,
 					$exprRightType,

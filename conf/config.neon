@@ -47,6 +47,7 @@ parameters:
 		readOnlyByPhpDoc: false
 		phpDocParserRequireWhitespaceBeforeDescription: false
 		runtimeReflectionRules: false
+		notAnalysedTrait: false
 	fileExtensions:
 		- php
 	checkAdvancedIsset: false
@@ -251,6 +252,7 @@ parametersSchema:
 		readOnlyByPhpDoc: bool()
 		phpDocParserRequireWhitespaceBeforeDescription: bool()
 		runtimeReflectionRules: bool()
+		notAnalysedTrait: bool()
 	])
 	fileExtensions: listOf(string())
 	checkAdvancedIsset: bool()
@@ -522,6 +524,9 @@ services:
 		arguments:
 			parser: @defaultAnalysisParser
 			reportUnmatchedIgnoredErrors: %reportUnmatchedIgnoredErrors%
+
+	-
+		class: PHPStan\Analyser\RuleErrorTransformer
 
 	-
 		class: PHPStan\Analyser\IgnoredErrorHelper
@@ -1741,6 +1746,11 @@ services:
 		class: PHPStan\Type\Php\DatePeriodConstructorReturnTypeExtension
 		tags:
 			- phpstan.broker.dynamicStaticMethodReturnTypeExtension
+
+	-
+		class: PHPStan\Type\ClosureTypeFactory
+		arguments:
+			parser: @currentPhpVersionPhpParser
 
 	exceptionTypeResolver:
 		class: PHPStan\Rules\Exceptions\ExceptionTypeResolver

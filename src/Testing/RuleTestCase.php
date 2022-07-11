@@ -2,19 +2,28 @@
 
 namespace PHPStan\Testing;
 
+use PhpParser\Node;
 use PHPStan\Analyser\Analyser;
 use PHPStan\Analyser\Error;
 use PHPStan\Analyser\FileAnalyser;
 use PHPStan\Analyser\NodeScopeResolver;
+use PHPStan\Analyser\RuleErrorTransformer;
+use PHPStan\Analyser\ScopeContext;
 use PHPStan\Analyser\TypeSpecifier;
+use PHPStan\Collectors\Collector;
+use PHPStan\Collectors\Registry as CollectorRegistry;
 use PHPStan\Dependency\DependencyResolver;
 use PHPStan\DependencyInjection\Type\DynamicThrowTypeExtensionProvider;
 use PHPStan\File\FileHelper;
+use PHPStan\Node\CollectedDataNode;
 use PHPStan\Php\PhpVersion;
 use PHPStan\PhpDoc\PhpDocInheritanceResolver;
 use PHPStan\PhpDoc\StubPhpDocProvider;
 use PHPStan\Reflection\InitializerExprTypeResolver;
-use PHPStan\Rules\Registry;
+use PHPStan\Rules\Properties\DirectReadWritePropertiesExtensionProvider;
+use PHPStan\Rules\Properties\ReadWritePropertiesExtension;
+use PHPStan\Rules\Properties\ReadWritePropertiesExtensionProvider;
+use PHPStan\Rules\Registry as RuleRegistry;
 use PHPStan\Rules\Rule;
 use PHPStan\Type\FileTypeMapper;
 use function array_map;
@@ -36,6 +45,22 @@ abstract class RuleTestCase extends PHPStanTestCase
 	 */
 	abstract protected function getRule(): Rule;
 
+	/**
+	 * @return array<Collector<Node, mixed>>
+	 */
+	protected function getCollectors(): array
+	{
+		return [];
+	}
+
+	/**
+	 * @return ReadWritePropertiesExtension[]
+	 */
+	protected function getReadWritePropertiesExtensions(): array
+	{
+		return [];
+	}
+
 	protected function getTypeSpecifier(): TypeSpecifier
 	{
 		return self::getContainer()->getService('typeSpecifier');
@@ -44,12 +69,15 @@ abstract class RuleTestCase extends PHPStanTestCase
 	private function getAnalyser(): Analyser
 	{
 		if ($this->analyser === null) {
-			$registry = new Registry([
+			$ruleRegistry = new RuleRegistry([
 				$this->getRule(),
 			]);
+			$collectorRegistry = new CollectorRegistry($this->getCollectors());
 
 			$reflectionProvider = $this->createReflectionProvider();
 			$typeSpecifier = $this->getTypeSpecifier();
+
+			$readWritePropertiesExtensions = $this->getReadWritePropertiesExtensions();
 			$nodeScopeResolver = new NodeScopeResolver(
 				$reflectionProvider,
 				self::getContainer()->getByType(InitializerExprTypeResolver::class),
@@ -63,6 +91,7 @@ abstract class RuleTestCase extends PHPStanTestCase
 				self::getContainer()->getByType(FileHelper::class),
 				$typeSpecifier,
 				self::getContainer()->getByType(DynamicThrowTypeExtensionProvider::class),
+				$readWritePropertiesExtensions !== [] ? new DirectReadWritePropertiesExtensionProvider($readWritePropertiesExtensions) : self::getContainer()->getByType(ReadWritePropertiesExtensionProvider::class),
 				$this->shouldPolluteScopeWithLoopInitialAssignments(),
 				$this->shouldPolluteScopeWithAlwaysIterableForeach(),
 				[],
@@ -74,11 +103,13 @@ abstract class RuleTestCase extends PHPStanTestCase
 				$nodeScopeResolver,
 				$this->getParser(),
 				self::getContainer()->getByType(DependencyResolver::class),
+				new RuleErrorTransformer(),
 				true,
 			);
 			$this->analyser = new Analyser(
 				$fileAnalyser,
-				$registry,
+				$ruleRegistry,
+				$collectorRegistry,
 				$nodeScopeResolver,
 				50,
 			);
@@ -103,7 +134,25 @@ abstract class RuleTestCase extends PHPStanTestCase
 		if (count($analyserResult->getInternalErrors()) > 0) {
 			$this->fail(implode("\n", $analyserResult->getInternalErrors()));
 		}
+
 		$actualErrors = $analyserResult->getUnorderedErrors();
+		$ruleErrorTransformer = new RuleErrorTransformer();
+		if (count($analyserResult->getCollectedData()) > 0) {
+			$ruleRegistry = new RuleRegistry([
+				$this->getRule(),
+			]);
+
+			$nodeType = CollectedDataNode::class;
+			$node = new CollectedDataNode($analyserResult->getCollectedData());
+			$scopeFactory = $this->createScopeFactory($this->createReflectionProvider(), $this->getTypeSpecifier());
+			$scope = $scopeFactory->create(ScopeContext::create('irrelevant'));
+			foreach ($ruleRegistry->getRules($nodeType) as $rule) {
+				$ruleErrors = $rule->processNode($node, $scope);
+				foreach ($ruleErrors as $ruleError) {
+					$actualErrors[] = $ruleErrorTransformer->transform($ruleError, $scope, $nodeType, $node->getLine());
+				}
+			}
+		}
 
 		$strictlyTypedSprintf = static function (int $line, string $message, ?string $tip): string {
 			$message = sprintf('%02d: %s', $line, $message);

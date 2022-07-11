@@ -743,6 +743,7 @@ class NodeScopeResolverTest extends TypeInferenceTestCase
 		yield from $this->gatherAssertTypes(__DIR__ . '/data/bug-6070.php');
 		yield from $this->gatherAssertTypes(__DIR__ . '/data/bug-6108.php');
 		yield from $this->gatherAssertTypes(__DIR__ . '/data/bug-1516.php');
+		yield from $this->gatherAssertTypes(__DIR__ . '/data/bug-6138.php');
 		yield from $this->gatherAssertTypes(__DIR__ . '/data/bug-6174.php');
 		yield from $this->gatherAssertTypes(__DIR__ . '/../Rules/Methods/data/bug-5749.php');
 		yield from $this->gatherAssertTypes(__DIR__ . '/data/bug-5675.php');
@@ -810,6 +811,7 @@ class NodeScopeResolverTest extends TypeInferenceTestCase
 		yield from $this->gatherAssertTypes(__DIR__ . '/data/array-reverse.php');
 		yield from $this->gatherAssertTypes(__DIR__ . '/data/bug-6889.php');
 		yield from $this->gatherAssertTypes(__DIR__ . '/data/bug-6891.php');
+		yield from $this->gatherAssertTypes(__DIR__ . '/data/shuffle.php');
 		yield from $this->gatherAssertTypes(__DIR__ . '/data/simplexml.php');
 
 		if (PHP_VERSION_ID >= 80100) {
@@ -833,6 +835,7 @@ class NodeScopeResolverTest extends TypeInferenceTestCase
 
 		yield from $this->gatherAssertTypes(__DIR__ . '/data/bug-2471.php');
 		yield from $this->gatherAssertTypes(__DIR__ . '/data/bug-5846.php');
+		yield from $this->gatherAssertTypes(__DIR__ . '/data/bug-5896.php');
 		yield from $this->gatherAssertTypes(__DIR__ . '/data/bug-6927.php');
 
 		yield from $this->gatherAssertTypes(__DIR__ . '/data/bug-3853.php');
@@ -919,6 +922,9 @@ class NodeScopeResolverTest extends TypeInferenceTestCase
 		yield from $this->gatherAssertTypes(__DIR__ . '/data/bug-7490.php');
 		yield from $this->gatherAssertTypes(__DIR__ . '/data/remember-possibly-impure-function-values.php');
 		yield from $this->gatherAssertTypes(__DIR__ . '/data/emptyiterator.php');
+		yield from $this->gatherAssertTypes(__DIR__ . '/data/collected-data.php');
+		yield from $this->gatherAssertTypes(__DIR__ . '/data/bug-7550.php');
+		yield from $this->gatherAssertTypes(__DIR__ . '/data/bug-7580.php');
 	}
 
 	/**

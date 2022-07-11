@@ -1098,4 +1098,29 @@ class CallToFunctionParametersRuleTest extends RuleTestCase
 		]);
 	}
 
+	public function testBug7211(): void
+	{
+		if (PHP_VERSION_ID < 80100) {
+			$this->markTestSkipped('Test requires PHP 8.1');
+		}
+
+		$this->checkExplicitMixed = true;
+		$this->analyse([__DIR__ . '/data/bug-7211.php'], []);
+	}
+
+	public function testBug5474(): void
+	{
+		$this->analyse([__DIR__ . '/../Comparison/data/bug-5474.php'], [
+			[
+				'Parameter #1 $data of function Bug5474\testData expects array{test: int}, *NEVER* given.',
+				26,
+			],
+		]);
+	}
+
+	public function testBug6781(): void
+	{
+		$this->analyse([__DIR__ . '/data/bug-6781.php'], []);
+	}
+
 }

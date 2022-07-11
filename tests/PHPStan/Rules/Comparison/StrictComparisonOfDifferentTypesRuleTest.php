@@ -555,4 +555,32 @@ class StrictComparisonOfDifferentTypesRuleTest extends RuleTestCase
 		$this->analyse([__DIR__ . '/data/bug-7166.php'], []);
 	}
 
+	public function testBug7555(): void
+	{
+		$this->checkAlwaysTrueStrictComparison = true;
+		$this->analyse([__DIR__ . '/data/bug-7555.php'], [
+			[
+				'Strict comparison using === between 2 and 2 will always evaluate to true.',
+				11,
+			],
+		]);
+	}
+
+	public function testBug7257(): void
+	{
+		$this->checkAlwaysTrueStrictComparison = false;
+		$this->analyse([__DIR__ . '/data/bug-7257.php'], []);
+	}
+
+	public function testBug5474(): void
+	{
+		$this->checkAlwaysTrueStrictComparison = false;
+		$this->analyse([__DIR__ . '/data/bug-5474.php'], [
+			[
+				'Strict comparison using !== between array{test: 1} and array{test: 1} will always evaluate to false.',
+				25,
+			],
+		]);
+	}
+
 }

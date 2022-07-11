@@ -138,7 +138,7 @@ class MatchExpressionRuleTest extends RuleTestCase
 				19,
 			],
 			[
-				'Match expression does not handle remaining values: MatchEnums\Foo::THREE|MatchEnums\Foo::TWO',
+				'Match expression does not handle remaining values: ($this(MatchEnums\Foo)&MatchEnums\Foo::TWO)|($this(MatchEnums\Foo)&MatchEnums\Foo::THREE)',
 				35,
 			],
 			[
@@ -198,6 +198,14 @@ class MatchExpressionRuleTest extends RuleTestCase
 			$this->markTestSkipped('Test requires PHP 8.1.');
 		}
 		$this->analyse([__DIR__ . '/data/bug-6064.php'], []);
+	}
+
+	public function testBug6647(): void
+	{
+		if (PHP_VERSION_ID < 80100) {
+			$this->markTestSkipped('Test requires PHP 8.1.');
+		}
+		$this->analyse([__DIR__ . '/data/bug-6647.php'], []);
 	}
 
 }

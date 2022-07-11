@@ -9,17 +9,13 @@ use PHPStan\BetterReflection\NodeCompiler\Exception\UnableToCompileNode;
 use PHPStan\BetterReflection\Reflection\Exception\NotAClassReflection;
 use PHPStan\BetterReflection\Reflection\Exception\NotAnInterfaceReflection;
 use PHPStan\BetterReflection\Reflector\Exception\IdentifierNotFound;
+use PHPStan\Collectors\CollectedData;
+use PHPStan\Collectors\Registry as CollectorRegistry;
 use PHPStan\Dependency\DependencyResolver;
 use PHPStan\Node\FileNode;
 use PHPStan\Parser\Parser;
 use PHPStan\Parser\ParserErrorsException;
-use PHPStan\Rules\FileRuleError;
-use PHPStan\Rules\IdentifierRuleError;
-use PHPStan\Rules\LineRuleError;
-use PHPStan\Rules\MetadataRuleError;
-use PHPStan\Rules\NonIgnorableRuleError;
-use PHPStan\Rules\Registry;
-use PHPStan\Rules\TipRuleError;
+use PHPStan\Rules\Registry as RuleRegistry;
 use function array_key_exists;
 use function array_keys;
 use function array_merge;
@@ -29,7 +25,6 @@ use function error_reporting;
 use function get_class;
 use function is_dir;
 use function is_file;
-use function is_string;
 use function restore_error_handler;
 use function set_error_handler;
 use function sprintf;
@@ -47,6 +42,7 @@ class FileAnalyser
 		private NodeScopeResolver $nodeScopeResolver,
 		private Parser $parser,
 		private DependencyResolver $dependencyResolver,
+		private RuleErrorTransformer $ruleErrorTransformer,
 		private bool $reportUnmatchedIgnoredErrors,
 	)
 	{
@@ -59,11 +55,17 @@ class FileAnalyser
 	public function analyseFile(
 		string $file,
 		array $analysedFiles,
-		Registry $registry,
+		RuleRegistry $ruleRegistry,
+		CollectorRegistry $collectorRegistry,
 		?callable $outerNodeCallback,
 	): FileAnalyserResult
 	{
+		/** @var Error[] $fileErrors */
 		$fileErrors = [];
+
+		/** @var CollectedData[] $fileCollectedData */
+		$fileCollectedData = [];
+
 		$fileDependencies = [];
 		$exportedNodes = [];
 		if (is_file($file)) {
@@ -72,7 +74,7 @@ class FileAnalyser
 				$parserNodes = $this->parser->parseFile($file);
 				$linesToIgnore = $this->getLinesToIgnoreFromTokens($file, $parserNodes);
 				$temporaryFileErrors = [];
-				$nodeCallback = function (Node $node, Scope $scope) use (&$fileErrors, &$fileDependencies, &$exportedNodes, $file, $registry, $outerNodeCallback, $analysedFiles, &$linesToIgnore, &$temporaryFileErrors): void {
+				$nodeCallback = function (Node $node, Scope $scope) use (&$fileErrors, &$fileCollectedData, &$fileDependencies, &$exportedNodes, $file, $ruleRegistry, $collectorRegistry, $outerNodeCallback, $analysedFiles, &$linesToIgnore, &$temporaryFileErrors): void {
 					if ($node instanceof Node\Stmt\Trait_) {
 						foreach (array_keys($linesToIgnore[$file] ?? []) as $lineToIgnore) {
 							if ($lineToIgnore < $node->getStartLine() || $lineToIgnore > $node->getEndLine()) {
@@ -87,7 +89,7 @@ class FileAnalyser
 					}
 					$uniquedAnalysedCodeExceptionMessages = [];
 					$nodeType = get_class($node);
-					foreach ($registry->getRules($nodeType) as $rule) {
+					foreach ($ruleRegistry->getRules($nodeType) as $rule) {
 						try {
 							$ruleErrors = $rule->processNode($node, $scope);
 						} catch (AnalysedCodeException $e) {
@@ -107,69 +109,7 @@ class FileAnalyser
 						}
 
 						foreach ($ruleErrors as $ruleError) {
-							$nodeLine = $node->getLine();
-							$line = $nodeLine;
-							$canBeIgnored = true;
-							$fileName = $scope->getFileDescription();
-							$filePath = $scope->getFile();
-							$traitFilePath = null;
-							$tip = null;
-							$identifier = null;
-							$metadata = [];
-							if ($scope->isInTrait()) {
-								$traitReflection = $scope->getTraitReflection();
-								if ($traitReflection->getFileName() !== null) {
-									$traitFilePath = $traitReflection->getFileName();
-								}
-							}
-							if (is_string($ruleError)) {
-								$message = $ruleError;
-							} else {
-								$message = $ruleError->getMessage();
-								if (
-									$ruleError instanceof LineRuleError
-									&& $ruleError->getLine() !== -1
-								) {
-									$line = $ruleError->getLine();
-								}
-								if (
-									$ruleError instanceof FileRuleError
-									&& $ruleError->getFile() !== ''
-								) {
-									$fileName = $ruleError->getFile();
-									$filePath = $ruleError->getFile();
-									$traitFilePath = null;
-								}
-
-								if ($ruleError instanceof TipRuleError) {
-									$tip = $ruleError->getTip();
-								}
-
-								if ($ruleError instanceof IdentifierRuleError) {
-									$identifier = $ruleError->getIdentifier();
-								}
-
-								if ($ruleError instanceof MetadataRuleError) {
-									$metadata = $ruleError->getMetadata();
-								}
-
-								if ($ruleError instanceof NonIgnorableRuleError) {
-									$canBeIgnored = false;
-								}
-							}
-							$temporaryFileErrors[] = new Error(
-								$message,
-								$fileName,
-								$line,
-								$canBeIgnored,
-								$filePath,
-								$traitFilePath,
-								$tip,
-								$nodeLine,
-								$nodeType,
-								$identifier,
-								$metadata,
-							);
+							$temporaryFileErrors[] = $this->ruleErrorTransformer->transform($ruleError, $scope, $nodeType, $node->getLine());
 						}
 					}
 
@@ -183,6 +123,36 @@ class FileAnalyser
 
 							unset($linesToIgnore[$file][$lineToIgnore]);
 						}
+					}
+
+					foreach ($collectorRegistry->getCollectors($nodeType) as $collector) {
+						try {
+							$collectedData = $collector->processNode($node, $scope);
+						} catch (AnalysedCodeException $e) {
+							if (isset($uniquedAnalysedCodeExceptionMessages[$e->getMessage()])) {
+								continue;
+							}
+
+							$uniquedAnalysedCodeExceptionMessages[$e->getMessage()] = true;
+							$fileErrors[] = new Error($e->getMessage(), $file, $node->getLine(), $e, null, null, $e->getTip());
+							continue;
+						} catch (IdentifierNotFound $e) {
+							$fileErrors[] = new Error(sprintf('Reflection error: %s not found.', $e->getIdentifier()->getName()), $file, $node->getLine(), $e, null, null, 'Learn more at https://phpstan.org/user-guide/discovering-symbols');
+							continue;
+						} catch (UnableToCompileNode | NotAClassReflection | NotAnInterfaceReflection $e) {
+							$fileErrors[] = new Error(sprintf('Reflection error: %s', $e->getMessage()), $file, $node->getLine(), $e);
+							continue;
+						}
+
+						if ($collectedData === null) {
+							continue;
+						}
+
+						$fileCollectedData[] = new CollectedData(
+							$collectedData,
+							$scope->getFile(),
+							get_class($collector),
+						);
 					}
 
 					try {
@@ -270,7 +240,7 @@ class FileAnalyser
 
 		$fileErrors = array_merge($fileErrors, $this->collectedErrors);
 
-		return new FileAnalyserResult($fileErrors, array_values(array_unique($fileDependencies)), $exportedNodes);
+		return new FileAnalyserResult($fileErrors, $fileCollectedData, array_values(array_unique($fileDependencies)), $exportedNodes);
 	}
 
 	/**

@@ -6,9 +6,10 @@ use Clue\React\NDJson\Decoder;
 use Clue\React\NDJson\Encoder;
 use PHPStan\Analyser\FileAnalyser;
 use PHPStan\Analyser\NodeScopeResolver;
+use PHPStan\Collectors\Registry as CollectorRegistry;
 use PHPStan\DependencyInjection\Container;
 use PHPStan\File\PathNotFoundException;
-use PHPStan\Rules\Registry;
+use PHPStan\Rules\Registry as RuleRegistry;
 use PHPStan\ShouldNotHappenException;
 use React\EventLoop\StreamSelectLoop;
 use React\Socket\ConnectionInterface;
@@ -189,9 +190,11 @@ class WorkerCommand extends Command
 		$out->on('error', $handleError);
 		/** @var FileAnalyser $fileAnalyser */
 		$fileAnalyser = $container->getByType(FileAnalyser::class);
-		/** @var Registry $registry */
-		$registry = $container->getByType(Registry::class);
-		$in->on('data', function (array $json) use ($fileAnalyser, $registry, $out, $analysedFiles, $tmpFile, $insteadOfFile, $output): void {
+		/** @var RuleRegistry $ruleRegistry */
+		$ruleRegistry = $container->getByType(RuleRegistry::class);
+		/** @var CollectorRegistry $collectorRegistry */
+		$collectorRegistry = $container->getByType(CollectorRegistry::class);
+		$in->on('data', function (array $json) use ($fileAnalyser, $ruleRegistry, $collectorRegistry, $out, $analysedFiles, $tmpFile, $insteadOfFile, $output): void {
 			$action = $json['action'];
 			if ($action !== 'analyse') {
 				return;
@@ -200,6 +203,7 @@ class WorkerCommand extends Command
 			$internalErrorsCount = 0;
 			$files = $json['files'];
 			$errors = [];
+			$collectedData = [];
 			$dependencies = [];
 			$exportedNodes = [];
 			foreach ($files as $file) {
@@ -207,12 +211,15 @@ class WorkerCommand extends Command
 					if ($file === $insteadOfFile) {
 						$file = $tmpFile;
 					}
-					$fileAnalyserResult = $fileAnalyser->analyseFile($file, $analysedFiles, $registry, null);
+					$fileAnalyserResult = $fileAnalyser->analyseFile($file, $analysedFiles, $ruleRegistry, $collectorRegistry, null);
 					$fileErrors = $fileAnalyserResult->getErrors();
 					$dependencies[$file] = $fileAnalyserResult->getDependencies();
 					$exportedNodes[$file] = $fileAnalyserResult->getExportedNodes();
 					foreach ($fileErrors as $fileError) {
 						$errors[] = $fileError;
+					}
+					foreach ($fileAnalyserResult->getCollectedData() as $data) {
+						$collectedData[] = $data;
 					}
 				} catch (Throwable $t) {
 					$this->errorCount++;
@@ -234,6 +241,7 @@ class WorkerCommand extends Command
 				'action' => 'result',
 				'result' => [
 					'errors' => $errors,
+					'collectedData' => $collectedData,
 					'dependencies' => $dependencies,
 					'exportedNodes' => $exportedNodes,
 					'filesCount' => count($files),
